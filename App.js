@@ -8,7 +8,6 @@ import Getmeesho from "./Api/Meesho/Getmeesho.js";
 import Postmeesho from "./Api/Meesho/PostMeesho.js";
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(path.resolve(), "uploads")));
