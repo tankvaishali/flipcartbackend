@@ -1,0 +1,23 @@
+{
+  "name": "flipcartbackend",
+  "version": "1.0.0",
+  "main": "App.js",
+  "scripts": {
+    "start":"node app",
+    "dev":"nodemon app",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type":"module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "mongoose": "^8.15.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
