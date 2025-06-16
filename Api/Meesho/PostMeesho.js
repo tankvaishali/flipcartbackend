@@ -2,13 +2,11 @@
  
 
 // multiple file select code
-
 import express from "express";
 import multer from "multer";
 import fs from "fs";
 import { PDFDocument } from "pdf-lib";
 import { user } from "../../Mongodb/Meeshoconnect.js";
-
 
 const Postmeesho = express.Router();
 
@@ -23,7 +21,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Allow multiple files at once (max 10 files here)
 Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
     try {
         let savedFiles = [];
@@ -84,9 +81,4 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
 
 export default Postmeesho;
 
- 
- 
- 
- 
- 
  
