@@ -85,6 +85,9 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
                 part2: `uploads/meesho/${folderName}/part2.pdf`
             });
             savedFiles.push(saved);
+            if (process.platform === "win32") {
+                exec(`start "" "${finalFolderPath}"`);
+            }
         }
 
         res.json({ message: "All files split and saved", data: savedFiles });
