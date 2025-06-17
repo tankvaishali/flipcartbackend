@@ -8,7 +8,14 @@ import { user } from "../../Mongodb/Flipkartconnect.js";
 const Postdata = express.Router();
 
 // Multer config (no destination = handled by system temp)
-const storage = multer.diskStorage({});
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, "uploads/");
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + "-" + file.originalname);
+    },
+});
 const upload = multer({ storage });
 
 let labelCounter = 1;
@@ -80,6 +87,6 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
         console.error("❌ Error:", err);
         res.status(500).send("Error processing files");
     }
-});  
+});
 
 export default Postdata;
