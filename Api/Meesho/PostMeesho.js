@@ -2,23 +2,17 @@ import express from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { PDFDocument } from "pdf-lib";
 import { user } from "../../Mongodb/Meeshoconnect.js";
 
 const Postmeesho = express.Router();
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, "uploads/meesho/");
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + "-" + file.originalname);
-    }
-});
+// Setup Multer for file uploads
+const storage = multer.diskStorage({});
 
 const upload = multer({ storage });
 
+// Counter for folder labels
 let labelCounter = 1;
 
 Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
@@ -38,13 +32,13 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
                 const [page] = await pdfDoc.copyPages(pdfDoc, [i]);
                 const { width, height } = page.getSize();
 
-                const embeddedPage1 = await pdfDocBarcode.embedPage(page);
+                const embeddedPage = await pdfDocBarcode.embedPage(page);
                 const barcodePage = pdfDocBarcode.addPage([width, height / 1.52]);
-                barcodePage.drawPage(embeddedPage1, {
+                barcodePage.drawPage(embeddedPage, {
                     x: 0,
                     y: -(height / 1.52),
                     width: width,
-                    height: height,
+                    height: height
                 });
 
                 const embeddedPage2 = await pdfDocInvoice.embedPage(page);
@@ -53,53 +47,38 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
                     x: 0,
                     y: 0,
                     width: width,
-                    height: height,
+                    height: height
                 });
             }
 
-            // Create local Desktop folder
-            const desktopBase = path.join(os.homedir(), "Desktop", "MeeshoLables");
-            const desktopFolder = path.join(desktopBase, `meesho-Lable_${labelCounter}`);
-            fs.mkdirSync(desktopFolder, { recursive: true });
+            // Generate Desktop path and folder
+            const desktopPath = path.join("C:/Users/HP/OneDrive/Desktop/MeeshoLables");
+            if (!fs.existsSync(desktopPath)) {
+                fs.mkdirSync(desktopPath, { recursive: true });
+            }
 
-            // Create public uploads folder
-            const uploadBase = path.join("uploads", "meesho", `meesho-Lable_${labelCounter}`);
-            fs.mkdirSync(uploadBase, { recursive: true });
+            const folderName = `meesho-Lable_${labelCounter++}`;
+            const finalFolderPath = path.join(desktopPath, folderName);
+            fs.mkdirSync(finalFolderPath, { recursive: true });
 
-            const part1DesktopPath = path.join(desktopFolder, "part1.pdf");
-            const part2DesktopPath = path.join(desktopFolder, "part2.pdf");
-
-            const part1UploadPath = path.join(uploadBase, "part1.pdf");
-            const part2UploadPath = path.join(uploadBase, "part2.pdf");
+            const part1Path = path.join(finalFolderPath, "part1.pdf");
+            const part2Path = path.join(finalFolderPath, "part2.pdf");
 
             const barcodeBytes = await pdfDocBarcode.save();
             const invoiceBytes = await pdfDocInvoice.save();
 
-            // Save to Desktop
-            fs.writeFileSync(part1DesktopPath, barcodeBytes);
-            fs.writeFileSync(part2DesktopPath, invoiceBytes);
+            fs.writeFileSync(part1Path, barcodeBytes);
+            fs.writeFileSync(part2Path, invoiceBytes);
 
-            // Save to uploads folder for Render hosting
-            fs.writeFileSync(part1UploadPath, barcodeBytes);
-            fs.writeFileSync(part2UploadPath, invoiceBytes);
-
-            const saved = await user.create({
-                part1: part1UploadPath.replace("uploads/", ""), // so it can be accessed via /uploads/
-                part2: part2UploadPath.replace("uploads/", "")
-            });
-
+            const saved = await user.create({ part1: part1Path, part2: part2Path });
             savedFiles.push(saved);
-            labelCounter++;
         }
 
-        res.json({
-            message: "All files split and saved to Desktop and server uploads",
-            data: savedFiles
-        });
+        res.json({ message: "All files cropped & saved on Desktop (Meesho)", data: savedFiles });
 
     } catch (err) {
-        console.error("❌ Error:", err);
-        res.status(500).send("Error processing files");
+        console.error("❌ Error processing files:", err);
+        res.status(500).send("Error processing PDF files");
     }
 });
 
