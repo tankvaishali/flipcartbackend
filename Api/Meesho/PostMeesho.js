@@ -1,3 +1,4 @@
+
 import express from "express";
 import multer from "multer";
 import fs from "fs";
@@ -7,7 +8,6 @@ import { user } from "../../Mongodb/Meeshoconnect.js";
 
 const Postmeesho = express.Router();
 
-// Setup Multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, "uploads/");
@@ -18,14 +18,11 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-
-// Counter for folder labels
 let labelCounter = 1;
 
 Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
     try {
         let savedFiles = [];
-
         for (const file of req.files) {
             const filePath = file.path;
             const existingPdfBytes = fs.readFileSync(filePath);
@@ -58,14 +55,13 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
                 });
             }
 
-            // Generate Desktop path and folder
-            const desktopPath = path.join("C:/Users/HP/OneDrive/Desktop/MeeshoLables");
-            if (!fs.existsSync(desktopPath)) {
-                fs.mkdirSync(desktopPath, { recursive: true });
+            const uploadsBase = path.join(path.resolve(), "uploads/meesho");
+            if (!fs.existsSync(uploadsBase)) {
+                fs.mkdirSync(uploadsBase, { recursive: true });
             }
 
             const folderName = `meesho-Lable_${labelCounter++}`;
-            const finalFolderPath = path.join(desktopPath, folderName);
+            const finalFolderPath = path.join(uploadsBase, folderName);
             fs.mkdirSync(finalFolderPath, { recursive: true });
 
             const part1Path = path.join(finalFolderPath, "part1.pdf");
@@ -77,12 +73,14 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
             fs.writeFileSync(part1Path, barcodeBytes);
             fs.writeFileSync(part2Path, invoiceBytes);
 
-            const saved = await user.create({ part1: part1Path, part2: part2Path });
+            const saved = await user.create({
+                part1: `uploads/meesho/${folderName}/part1.pdf`,
+                part2: `uploads/meesho/${folderName}/part2.pdf`
+            });
             savedFiles.push(saved);
         }
 
-        res.json({ message: "All files cropped & saved on Desktop (Meesho)", data: savedFiles });
-
+        res.json({ message: "All files split and saved", data: savedFiles });
     } catch (err) {
         console.error("❌ Error processing files:", err);
         res.status(500).send("Error processing PDF files");
@@ -90,3 +88,4 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
 });
 
 export default Postmeesho;
+
