@@ -80,6 +80,6 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
         console.error("❌ Error:", err);
         res.status(500).send("Error processing files");
     }
-});
+});  
 
 export default Postdata;
