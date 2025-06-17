@@ -3,6 +3,7 @@ import express from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { PDFDocument } from "pdf-lib";
 import { user } from "../../Mongodb/Meeshoconnect.js";
 
@@ -72,6 +73,12 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
 
             fs.writeFileSync(part1Path, barcodeBytes);
             fs.writeFileSync(part2Path, invoiceBytes);
+
+            // Also save on Desktop
+            const desktopDir = path.join(os.homedir(), "Desktop/MeeshoLables", folderName);
+            fs.mkdirSync(desktopDir, { recursive: true });
+            fs.writeFileSync(path.join(desktopDir, "part1.pdf"), barcodeBytes);
+            fs.writeFileSync(path.join(desktopDir, "part2.pdf"), invoiceBytes);
 
             const saved = await user.create({
                 part1: `uploads/meesho/${folderName}/part1.pdf`,
