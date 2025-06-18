@@ -1,29 +1,36 @@
 import express from "express";
 import multer from "multer";
+import fs from "fs";
+import path from "path";
 import { PDFDocument } from "pdf-lib";
 import { user } from "../../Mongodb/Meeshoconnect.js";
-import streamifier from "streamifier";
-import archiver from "archiver";
 import cloudinary from "../cloudinary.js";
 
 const Postmeesho = express.Router();
-const storage = multer.memoryStorage();
+
+const storage = multer.diskStorage({});
 const upload = multer({ storage });
+
+let labelCounter = 1;
+
+const uploadToCloudinary = async (filePath, fileName) => {
+    return await cloudinary.uploader.upload(filePath, {
+        resource_type: "raw",
+        public_id: `meesho/${fileName}.pdf`,
+        use_filename: true,
+        unique_filename: false,
+        overwrite: true,
+    });
+};
 
 Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
     try {
-        const zipArchive = archiver("zip", { zlib: { level: 9 } });
-        const zipChunks = [];
-
-        // Stream ZIP output in memory
-        zipArchive.on("data", chunk => zipChunks.push(chunk));
-        zipArchive.on("warning", err => console.warn("ZIP warning:", err));
-        zipArchive.on("error", err => { throw err });
-
         let savedFiles = [];
 
         for (const file of req.files) {
-            const pdfDoc = await PDFDocument.load(file.buffer);
+            const filePath = file.path;
+            const existingPdfBytes = fs.readFileSync(filePath);
+            const pdfDoc = await PDFDocument.load(existingPdfBytes);
             const totalPages = pdfDoc.getPageCount();
 
             const pdfDocBarcode = await PDFDocument.create();
@@ -33,66 +40,59 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
                 const [page] = await pdfDoc.copyPages(pdfDoc, [i]);
                 const { width, height } = page.getSize();
 
-                const barcodePage = pdfDocBarcode.addPage([width, height / 1.52]);
-                barcodePage.drawPage(page, {
+                const embeddedPage = await pdfDocBarcode.embedPage(page);
+                const barcodePage = pdfDocBarcode.addPage([width, height / 1.84]);
+                barcodePage.drawPage(embeddedPage, {
                     x: 0,
-                    y: -(height / 1.52),
-                    width,
-                    height
+                    y: -(height / 1.84),
+                    width: width,
+                    height: height,
                 });
 
-                const invoicePage = pdfDocInvoice.addPage([width, height / 1.52]);
-                invoicePage.drawPage(page, {
+                const embeddedPage2 = await pdfDocInvoice.embedPage(page);
+                const invoicePage = pdfDocInvoice.addPage([width, height / 1.84]);
+                invoicePage.drawPage(embeddedPage2, {
                     x: 0,
                     y: 0,
-                    width,
-                    height
+                    width: width,
+                    height: height,
                 });
             }
+
+            const folderName = `flipkart-Lable_${labelCounter++}`;
+            const finalFolderPath = path.join("C:/Users/HP/OneDrive/Desktop/FlipkartLables", folderName);
+            fs.mkdirSync(finalFolderPath, { recursive: true });
+
+            const barcodePath = path.join(finalFolderPath, "part1.pdf");
+            const invoicePath = path.join(finalFolderPath, "part2.pdf");
 
             const barcodeBytes = await pdfDocBarcode.save();
             const invoiceBytes = await pdfDocInvoice.save();
 
-            // Upload both parts to Cloudinary
-            const uploadToCloudinary = (buffer, filename) =>
-                new Promise((resolve, reject) => {
-                    const uploadStream = cloudinary.uploader.upload_stream(
-                        { resource_type: "raw", public_id: `meesho/${filename}` },
-                        (error, result) => {
-                            if (error) reject(error);
-                            else resolve(result.secure_url);
-                        }
-                    );
-                    streamifier.createReadStream(buffer).pipe(uploadStream);
-                });
+            fs.writeFileSync(barcodePath, barcodeBytes);
+            fs.writeFileSync(invoicePath, invoiceBytes);
 
-            const part1Url = await uploadToCloudinary(barcodeBytes, `part1_${Date.now()}`);
-            const part2Url = await uploadToCloudinary(invoiceBytes, `part2_${Date.now()}`);
+            // 🔹 Upload to Cloudinary
+            const barcodeResult = await uploadToCloudinary(barcodePath, `part1_${Date.now()}`);
+            const invoiceResult = await uploadToCloudinary(invoicePath, `part2_${Date.now()}`);
 
-            // Add to ZIP in memory
-            zipArchive.append(Buffer.from(barcodeBytes), { name: `part1_${Date.now()}.pdf` });
-            zipArchive.append(Buffer.from(invoiceBytes), { name: `part2_${Date.now()}.pdf` });
+            // 🔹 Save URLs in MongoDB
+            const saved = await user.create({
+                part1: barcodeResult.secure_url,
+                part2: invoiceResult.secure_url,
+            });
 
-            const saved = await user.create({ part1: part1Url, part2: part2Url });
             savedFiles.push(saved);
+
+            // Optionally remove temp files
+            fs.unlinkSync(barcodePath);
+            fs.unlinkSync(invoicePath);
         }
 
-        // Finalize the zip
-        zipArchive.finalize();
-
-        zipArchive.on("end", () => {
-            const zipBuffer = Buffer.concat(zipChunks);
-            res.set({
-                "Content-Type": "application/zip",
-                "Content-Disposition": "attachment; filename=meesho_labels.zip",
-                "Content-Length": zipBuffer.length
-            });
-            res.send(zipBuffer);
-        });
-
+        res.json({ message: "Files cropped, uploaded to Cloudinary, and saved in DB", data: savedFiles });
     } catch (err) {
-        console.error("❌ Error processing files:", err);
-        res.status(500).send("Error processing PDF files");
+        console.error("❌ Error processing PDFs:", err);
+        res.status(500).send("Error processing files");
     }
 });
 
