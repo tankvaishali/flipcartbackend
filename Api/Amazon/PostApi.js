@@ -1,3 +1,5 @@
+
+
 import express from "express";
 import multer from "multer";
 import fs from "fs";
@@ -7,17 +9,25 @@ import { amazon } from "../../Mongodb/AmazonConnection.js";
 
 const Postdata = express.Router();
 
+// Ensure uploads directory exists
 const uploadDir = "uploads";
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
 
-const storage = multer.diskStorage({});
+// Multer storage config
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + "-" + file.originalname);
+    }
+});
 
 const upload = multer({ storage });
 
-let labelCounter = 1; // this will keep increasing for naming folders
-
+// Route: Split PDF into 2 files (page 1 → part1, page 2 → part2)
 Postdata.post("/", upload.array("files", 10), async (req, res) => {
     try {
         let savedFiles = [];
@@ -41,18 +51,11 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
             const [page2] = await pdfPart2.copyPages(originalPdf, [1]);
             pdfPart2.addPage(page2);
 
-            // Folder on Desktop
-            const desktopPath = path.join("C:/Users/HP/OneDrive/Desktop/AmazonLables");
-            if (!fs.existsSync(desktopPath)) {
-                fs.mkdirSync(desktopPath, { recursive: true });
-            }
+            const timestamp = Date.now();
+            const originalName = path.basename(file.originalname, path.extname(file.originalname));
 
-            const folderName = `amazon-Lable_${labelCounter++}`;
-            const finalFolderPath = path.join(desktopPath, folderName);
-            fs.mkdirSync(finalFolderPath, { recursive: true });
-
-            const part1Path = path.join(finalFolderPath, "part1.pdf");
-            const part2Path = path.join(finalFolderPath, "part2.pdf");
+            const part1Path = `${uploadDir}/part1-${timestamp}-${originalName}.pdf`;
+            const part2Path = `${uploadDir}/part2-${timestamp}-${originalName}.pdf`;
 
             const part1Bytes = await pdfPart1.save();
             const part2Bytes = await pdfPart2.save();
@@ -68,10 +71,10 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
             savedFiles.push(saved);
         }
 
-        res.json({ message: "Files split and saved to Desktop with label folders", data: savedFiles });
+        res.json({ message: "Files split into part1 and part2 successfully", data: savedFiles });
 
     } catch (err) {
-        console.error("❌ Error while processing PDFs:", err);
+        console.error("Error while processing PDFs:", err);
         res.status(500).send("Error processing PDF files");
     }
 });
