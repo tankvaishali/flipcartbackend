@@ -115,8 +115,8 @@ let labelCounter = 1;
 
 const uploadToCloudinary = async (filePath, fileName) => {
     return await cloudinary.uploader.upload(filePath, {
-        resource_type: "raw",
-        public_id: `meesho/${fileName}.pdf`,
+       
+        public_id: `meesho/${fileName}`,
         use_filename: true,
         unique_filename: false,
         overwrite: true,
