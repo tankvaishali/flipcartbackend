@@ -1,28 +1,29 @@
 import express from "express";
 import multer from "multer";
-import fs from "fs";
-import path from "path";
 import { PDFDocument } from "pdf-lib";
 import { user } from "../../Mongodb/Meeshoconnect.js";
+import streamifier from "streamifier";
+import archiver from "archiver";
+import cloudinary from "../cloudinary.js";
 
 const Postmeesho = express.Router();
-
-// Setup Multer for file uploads
-const storage = multer.diskStorage({});
-
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
-
-// Counter for folder labels
-let labelCounter = 1;
 
 Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
     try {
+        const zipArchive = archiver("zip", { zlib: { level: 9 } });
+        const zipChunks = [];
+
+        // Stream ZIP output in memory
+        zipArchive.on("data", chunk => zipChunks.push(chunk));
+        zipArchive.on("warning", err => console.warn("ZIP warning:", err));
+        zipArchive.on("error", err => { throw err });
+
         let savedFiles = [];
 
         for (const file of req.files) {
-            const filePath = file.path;
-            const existingPdfBytes = fs.readFileSync(filePath);
-            const pdfDoc = await PDFDocument.load(existingPdfBytes);
+            const pdfDoc = await PDFDocument.load(file.buffer);
             const totalPages = pdfDoc.getPageCount();
 
             const pdfDocBarcode = await PDFDocument.create();
@@ -32,49 +33,62 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
                 const [page] = await pdfDoc.copyPages(pdfDoc, [i]);
                 const { width, height } = page.getSize();
 
-                const embeddedPage = await pdfDocBarcode.embedPage(page);
                 const barcodePage = pdfDocBarcode.addPage([width, height / 1.52]);
-                barcodePage.drawPage(embeddedPage, {
+                barcodePage.drawPage(page, {
                     x: 0,
                     y: -(height / 1.52),
-                    width: width,
-                    height: height
+                    width,
+                    height
                 });
 
-                const embeddedPage2 = await pdfDocInvoice.embedPage(page);
                 const invoicePage = pdfDocInvoice.addPage([width, height / 1.52]);
-                invoicePage.drawPage(embeddedPage2, {
+                invoicePage.drawPage(page, {
                     x: 0,
                     y: 0,
-                    width: width,
-                    height: height
+                    width,
+                    height
                 });
             }
-
-            // Generate Desktop path and folder
-            const desktopPath = path.join("C:/Users/HP/OneDrive/Desktop/MeeshoLables");
-            if (!fs.existsSync(desktopPath)) {
-                fs.mkdirSync(desktopPath, { recursive: true });
-            }
-
-            const folderName = `meesho-Lable_${labelCounter++}`;
-            const finalFolderPath = path.join(desktopPath, folderName);
-            fs.mkdirSync(finalFolderPath, { recursive: true });
-
-            const part1Path = path.join(finalFolderPath, "part1.pdf");
-            const part2Path = path.join(finalFolderPath, "part2.pdf");
 
             const barcodeBytes = await pdfDocBarcode.save();
             const invoiceBytes = await pdfDocInvoice.save();
 
-            fs.writeFileSync(part1Path, barcodeBytes);
-            fs.writeFileSync(part2Path, invoiceBytes);
+            // Upload both parts to Cloudinary
+            const uploadToCloudinary = (buffer, filename) =>
+                new Promise((resolve, reject) => {
+                    const uploadStream = cloudinary.uploader.upload_stream(
+                        { resource_type: "raw", public_id: `meesho/${filename}` },
+                        (error, result) => {
+                            if (error) reject(error);
+                            else resolve(result.secure_url);
+                        }
+                    );
+                    streamifier.createReadStream(buffer).pipe(uploadStream);
+                });
 
-            const saved = await user.create({ part1: part1Path, part2: part2Path });
+            const part1Url = await uploadToCloudinary(barcodeBytes, `part1_${Date.now()}`);
+            const part2Url = await uploadToCloudinary(invoiceBytes, `part2_${Date.now()}`);
+
+            // Add to ZIP in memory
+            zipArchive.append(Buffer.from(barcodeBytes), { name: `part1_${Date.now()}.pdf` });
+            zipArchive.append(Buffer.from(invoiceBytes), { name: `part2_${Date.now()}.pdf` });
+
+            const saved = await user.create({ part1: part1Url, part2: part2Url });
             savedFiles.push(saved);
         }
 
-        res.json({ message: "All files cropped & saved on Desktop (Meesho)", data: savedFiles });
+        // Finalize the zip
+        zipArchive.finalize();
+
+        zipArchive.on("end", () => {
+            const zipBuffer = Buffer.concat(zipChunks);
+            res.set({
+                "Content-Type": "application/zip",
+                "Content-Disposition": "attachment; filename=meesho_labels.zip",
+                "Content-Length": zipBuffer.length
+            });
+            res.send(zipBuffer);
+        });
 
     } catch (err) {
         console.error("❌ Error processing files:", err);
