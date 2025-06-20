@@ -1,8 +1,10 @@
-import mongoose, { Schema } from "mongoose";
+const mongoose = require("mongoose");
 
-const schema = new Schema({
+const schema = new mongoose.Schema({
     part1: { type: String },
     part2: { type: String }
 });
 
-export const user = mongoose.model("flipcart", schema);
+const user = mongoose.model("flipkart", schema);
+
+module.exports = { user };

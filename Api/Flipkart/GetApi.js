@@ -1,5 +1,5 @@
-import express from "express";
-import { user } from "../../Mongodb/Flipkartconnect.js";
+const express = require("express");
+const { user } = require("../../Mongodb/Flipkartconnect");
 
 const Getdata = express.Router();
 
@@ -13,4 +13,4 @@ Getdata.get("/", async (req, res) => {
     }
 });
 
-export default Getdata;
+module.exports = Getdata;

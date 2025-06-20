@@ -1,13 +1,14 @@
 {
   "name": "flipcartbackend",
   "version": "1.0.0",
-  "main": "App.js",
+  "main": "app.js",
+  "bin": "app.js",
   "scripts": {
     "start": "node app",
     "dev": "nodemon app",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "type": "module",
+  "type": "commonjs",
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -21,6 +22,7 @@
     "multer": "^2.0.1",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^5.3.31",
     "streamifier": "^0.1.1"
   },
   "devDependencies": {

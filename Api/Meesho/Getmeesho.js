@@ -1,5 +1,5 @@
-import express from "express";
-import { user } from "../../Mongodb/Meeshoconnect.js";
+const express = require("express");
+const { user } = require("../../Mongodb/Meeshoconnect");
 
 const Getmeesho = express.Router();
 
@@ -13,4 +13,4 @@ Getmeesho.get("/", async (req, res) => {
     }
 });
 
-export default Getmeesho;
+module.exports = Getmeesho;
