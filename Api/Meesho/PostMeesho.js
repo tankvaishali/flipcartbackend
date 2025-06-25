@@ -29,7 +29,7 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
     try {
         const savedFiles = [];
 
-        // Get or create MeeshoLabels folder on Desktop
+        // Create MeeshoLabels folder on Desktop if it doesn't exist
         const desktopBase = getDesktopPath();
         const outputFolder = path.join(desktopBase, "MeeshoLabels");
 
@@ -50,19 +50,26 @@ Postmeesho.post("/", upload.array("files", 10), async (req, res) => {
                 const [page] = await pdfDoc.copyPages(pdfDoc, [i]);
                 const { width, height } = page.getSize();
 
-                // Barcode part (bottom)
+                // === PART 1: Barcode section (bottom cropped + top cropped) ===
+                const cropTop = 30; // Pixels to remove from top
+                const originalCropHeight = height / 2.14;
+                const visibleHeight = originalCropHeight - cropTop;
+
+                const barcodePage = pdfDocBarcode.addPage([width, visibleHeight]);
                 const embeddedPage = await pdfDocBarcode.embedPage(page);
-                const barcodePage = pdfDocBarcode.addPage([width, height / 1.52]);
+
                 barcodePage.drawPage(embeddedPage, {
                     x: 0,
-                    y: -(height / 1.52),
+                    y: -cropTop - (height - originalCropHeight),
                     width,
                     height,
                 });
 
-                // Invoice part (top)
+                // === PART 2: Invoice section (top cropped as per original logic) ===
+                const invoiceHeight = height / 1.76;
+                const invoicePage = pdfDocInvoice.addPage([width, invoiceHeight]);
                 const embeddedPage2 = await pdfDocInvoice.embedPage(page);
-                const invoicePage = pdfDocInvoice.addPage([width, height / 1.52]);
+
                 invoicePage.drawPage(embeddedPage2, {
                     x: 0,
                     y: 0,

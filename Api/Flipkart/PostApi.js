@@ -46,14 +46,15 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
             const pdfDocBarcode = await PDFDocument.create();
             const pdfDocInvoice = await PDFDocument.create();
 
-            // === PART 1: Only First Page - Crop Barcode Area Centered ===
+            // === PART 1: Only First Page - Crop Barcode Area Centered + Avoid Top ===
             if (totalPages >= 1) {
                 const [firstPage] = await pdfDoc.copyPages(pdfDoc, [0]);
                 const { width, height } = firstPage.getSize();
 
-                const cropHeight = 385;      // Vertical crop (height of barcode)
-                const cropLeft = 150;        // Horizontal left crop
-                const cropRight = 150;       // Horizontal right crop
+                const cropTop = 23;       // Avoid 100px from top
+                const cropHeight = 361;    // Desired height of the cropped area
+                const cropLeft = 170;      // Crop left
+                const cropRight = 170;     // Crop right
                 const croppedWidth = width - cropLeft - cropRight;
 
                 const barcodePage = pdfDocBarcode.addPage([croppedWidth, cropHeight]);
@@ -61,7 +62,7 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
 
                 barcodePage.drawPage(embeddedPage, {
                     x: -cropLeft,
-                    y: -height + cropHeight, // Crop from bottom
+                    y: -(height - cropHeight - cropTop), // Crop from bottom + shift down to avoid top
                     width: width,
                     height: height,
                 });
