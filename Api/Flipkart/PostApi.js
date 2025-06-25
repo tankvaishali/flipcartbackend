@@ -9,11 +9,11 @@ const { user } = require("../../Mongodb/Flipkartconnect");
 
 const Postdata = express.Router();
 
-// Multer config (store in temp location)
+// Multer config
 const storage = multer.diskStorage({});
 const upload = multer({ storage });
 
-// Utility: Get OneDrive or fallback Desktop path
+// Get OneDrive or Desktop path
 function getOneDriveDesktopPath() {
     const home = os.homedir();
     const oneDriveDesktop = path.join(home, "OneDrive", "Desktop");
@@ -30,7 +30,6 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
     try {
         let savedFiles = [];
 
-        // Get dynamic desktop path
         const desktopPath = getOneDriveDesktopPath();
         const outputFolder = path.join(desktopPath, "FlipkartLabels");
 
@@ -47,23 +46,37 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
             const pdfDocBarcode = await PDFDocument.create();
             const pdfDocInvoice = await PDFDocument.create();
 
+            // === PART 1: Only First Page - Crop Barcode Area Centered ===
+            if (totalPages >= 1) {
+                const [firstPage] = await pdfDoc.copyPages(pdfDoc, [0]);
+                const { width, height } = firstPage.getSize();
+
+                const cropHeight = 385;      // Vertical crop (height of barcode)
+                const cropLeft = 150;        // Horizontal left crop
+                const cropRight = 150;       // Horizontal right crop
+                const croppedWidth = width - cropLeft - cropRight;
+
+                const barcodePage = pdfDocBarcode.addPage([croppedWidth, cropHeight]);
+                const embeddedPage = await pdfDocBarcode.embedPage(firstPage);
+
+                barcodePage.drawPage(embeddedPage, {
+                    x: -cropLeft,
+                    y: -height + cropHeight, // Crop from bottom
+                    width: width,
+                    height: height,
+                });
+            }
+
+            // === PART 2: All Pages - Top Crop for Invoice ===
             for (let i = 0; i < totalPages; i++) {
                 const [page] = await pdfDoc.copyPages(pdfDoc, [i]);
                 const { width, height } = page.getSize();
 
-                // Bottom crop (part1)
-                const embeddedPage = await pdfDocBarcode.embedPage(page);
-                const barcodePage = pdfDocBarcode.addPage([width, height / 1.84]);
-                barcodePage.drawPage(embeddedPage, {
-                    x: 0,
-                    y: -(height / 1.84),
-                    width: width,
-                    height: height,
-                });
+                const invoiceHeight = height / 1.84;
+                const invoicePage = pdfDocInvoice.addPage([width, invoiceHeight]);
 
-                // Top crop (part2)
                 const embeddedPage2 = await pdfDocInvoice.embedPage(page);
-                const invoicePage = pdfDocInvoice.addPage([width, height / 1.84]);
+
                 invoicePage.drawPage(embeddedPage2, {
                     x: 0,
                     y: 0,
@@ -90,7 +103,7 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
         exec(`start "" "${outputFolder}"`);
 
         res.json({
-            message: "✅ All files processed & saved directly in FlipkartLabels on Desktop",
+            message: "✅ All files processed & saved in FlipkartLabels on Desktop",
             folder: outputFolder,
             data: savedFiles,
         });
@@ -101,6 +114,4 @@ Postdata.post("/", upload.array("files", 10), async (req, res) => {
     }
 });
 
-
 module.exports = Postdata;
-
